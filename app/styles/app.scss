@@ -1,0 +1,15 @@
+@import 'vendor/bourbon/dist/bourbon';
+@import 'vendor/neat/app/assets/stylesheets/neat';
+@import 'vendor/bitters/app/assets/stylesheets/base';
+
+section {
+  @include outer-container;
+}
+
+canvas {
+  width: 450px;
+  height: 450px;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+}
