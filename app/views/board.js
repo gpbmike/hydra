@@ -172,7 +172,7 @@ export default Ember.View.extend({
     ctx.strokeRect(coord.x * cw, coord.y * cw, cw, cw);
   },
 
-  checkCollision: function (x, y, snake) {
+  checkCollision: function (x, y) {
     var w = this.get('canvasWidth'),
         h = this.get('canvasHeight'),
         cw = this.get('cellWidth');
