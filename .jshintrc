@@ -2,7 +2,9 @@
   "predef": {
     "document": true,
     "window": true,
-    "HydraENV": true
+    "HydraENV": true,
+    "Firebase": true,
+    "FirebaseSimpleLogin": true
   },
   "browser" : true,
   "boss" : true,

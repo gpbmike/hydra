@@ -4,12 +4,15 @@ export default Ember.View.extend({
 
   tagName: 'canvas',
 
+  init: function () {
+    this.ref = new Firebase('https://hydra.firebaseio.com/snakes');
+
+    this._super.apply(this, arguments);
+  },
+
   ctx: null,
 
-  snake: Ember.A([]),
-  direction: "right",
   food: null,
-  score: 0,
 
   cellWidth: 10,
   canvasWidth: 450,
@@ -18,9 +21,6 @@ export default Ember.View.extend({
   createGame: function () {
 
     Ember.Logger.log('Creating game.');
-
-    this.set('direction', 'right');
-    this.set('score', 0);
 
     this.createSnake();
     this.createFood();
@@ -31,12 +31,26 @@ export default Ember.View.extend({
 
     Ember.Logger.log('Creating snake.');
 
-    this.set('snake', Ember.A([])); // Empty array to start with
+    this.set('direction', 'right');
+
+    var snake = this.getWithDefault('snake', this.get('context').store.createRecord('snake'));
+
+    snake.set('score', 0);
+
+    var segments = Ember.A([]);
+
     var length = 5; // Length of the snake
     for (var i = length-1; i>=0; i--) {
       // This will create a horizontal snake starting from the top left
-      this.get('snake').pushObject(Ember.Object.create({x: i, y: 0}));
+      segments.pushObject(Ember.Object.create({ x: i, y: 0 }));
     }
+
+    snake.set('coords', segments).save();
+
+    // kill the snake when you leave
+    this.ref.child(snake.get('id')).onDisconnect().remove();
+
+    this.set('snake', snake); // Empty array to start with
   },
 
   createFood: function () {
@@ -59,11 +73,35 @@ export default Ember.View.extend({
     // Lets paint the canvas now
     this.clearCanvas();
 
+    this.set('occupied', Ember.A([]));
+
+    // Paint all the snakes
+    this.get('snakes').forEach(function (snake) {
+      var coords = snake.getWithDefault('coords', []);
+      coords.forEach(this.paintCell.bind(this));
+      this.get('occupied').addObjects(coords.map(function (coord) {
+        return coord.x + ',' + coord.y;
+      }));
+    }, this);
+
+    // Paint the food
+    this.paintCell(this.get('food'));
+
+    // Lets paint the score
+    var score_text = "Score: " + this.get('snake.score');
+    this.get('ctx').fillText(score_text, 5, this.get('canvasHeight') - 5);
+
+    this.set('paintLater', Ember.run.later(this.paint.bind(this), 60));
+
+  },
+
+  moveSnake: function () {
+
     // The movement code for the snake to come here.
     // The logic is simple
     // Pop out the tail cell and place it infront of the head cell
-    var nx = this.get('snake.firstObject.x');
-    var ny = this.get('snake.firstObject.y');
+    var nx = this.get('snake.coords.firstObject.x');
+    var ny = this.get('snake.coords.firstObject.y');
 
     // These were the position of the head cell.
     // We will increment it to get the new head position
@@ -88,40 +126,38 @@ export default Ember.View.extend({
     // Lets add the code for body collision
     // Now if the head of the snake bumps into its body, the game will restart
     if (this.checkCollision(nx, ny, this.get('snake'))) {
+      Ember.Logger.warn('Collision, restarting.');
+
       // restart game
-      this.createGame();
-      // Lets organize the code a bit now.
-      return;
-    }
+      this.createSnake();
 
-    // Lets write the code to make the snake eat the food
-    // The logic is simple
-    // If the new head position matches with that of the food,
-    // Create a new head instead of moving the tail
-    var tail;
-    if (nx === this.get('food.x') && ny === this.get('food.y')) {
-      tail = Ember.Object.create({ x: nx, y: ny });
-      this.incrementProperty('score');
-      // Create new food
-      this.createFood();
     } else {
-      tail = this.get('snake').popObject(); // pops out the last cell
-      tail.set('x', nx);
-      tail.set('y', ny);
+
+      // Lets write the code to make the snake eat the food
+      // The logic is simple
+      // If the new head position matches with that of the food,
+      // Create a new head instead of moving the tail
+      var tail;
+      if (nx === this.get('food.x') && ny === this.get('food.y')) {
+        tail = Ember.Object.create({ x: nx, y: ny });
+        this.incrementProperty('snake.score');
+        // Create new food
+        this.createFood();
+      } else {
+        tail = this.get('snake.coords').popObject(); // pops out the last cell
+        tail.x = nx;
+        tail.y = ny;
+      }
+      // The snake can now eat the food.
+
+      this.get('snake.coords').unshiftObject(tail); // puts back the tail as the first cell
+
+      this.get('snake').save();
+
     }
-    // The snake can now eat the food.
 
-    this.get('snake').unshiftObject(tail); // puts back the tail as the first cell
+    Ember.run.later(this.moveSnake.bind(this), 60);
 
-    // Paint the snake
-    this.get('snake').forEach(this.paintCell.bind(this));
-
-    // Paint the food
-    this.paintCell(this.get('food'));
-
-    // Lets paint the score
-    var score_text = "Score: " + this.get('score');
-    this.get('ctx').fillText(score_text, 5, this.get('canvasHeight') - 5);
   },
 
   paintCell: function (coord) {
@@ -141,13 +177,16 @@ export default Ember.View.extend({
 
     // See if snake hit a wall
     if (x === -1 || x === w/cw || y === -1 || y === h/cw) {
+      Ember.Logger.warn('Hit wall.');
       return true;
     }
 
-    // See if you hit yourself
-    return snake.any(function (segment) {
-      return x === segment.get('x') && y === segment.get('y');
-    });
+    if (this.get('occupied').indexOf(x + ',' + y) >= 0) {
+      Ember.Logger.warn('Hit snake.');
+      return true;
+    }
+
+    return false;
   },
 
   didInsertElement: function () {
@@ -165,12 +204,19 @@ export default Ember.View.extend({
 
     Ember.Logger.info("Canvas is %@ by %@".fmt(w, h));
 
-    this.createGame();
+    this.get('context').store.find('snake').then(function (snakes) {
 
-    this.set('gameLoop', setInterval(this.paint.bind(this), 60));
+      this.set('snakes', snakes);
 
-    this.$().attr('tabindex',0);
-    this.$().focus();
+      this.createGame();
+
+      this.paint();
+      this.moveSnake();
+
+      this.$().attr('tabindex',0);
+      this.$().focus();
+
+    }.bind(this));
 
   },
 
