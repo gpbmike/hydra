@@ -14,6 +14,8 @@ export default Ember.View.extend({
 
   food: null,
 
+  loopTime: 120,
+
   cellWidth: 10,
   canvasWidth: 450,
   canvasHeight: 450,
@@ -91,7 +93,7 @@ export default Ember.View.extend({
     var score_text = "Score: " + this.get('snake.score');
     this.get('ctx').fillText(score_text, 5, this.get('canvasHeight') - 5);
 
-    this.set('paintLater', Ember.run.later(this.paint.bind(this), 60));
+    this.set('paintLater', Ember.run.later(this.paint.bind(this), this.get('loopTime')));
 
   },
 
@@ -156,7 +158,7 @@ export default Ember.View.extend({
 
     }
 
-    Ember.run.later(this.moveSnake.bind(this), 60);
+    Ember.run.later(this.moveSnake.bind(this), this.get('loopTime'));
 
   },
 
